@@ -1,0 +1,5 @@
+/build/
+/build-*/
+/calibraciones/
+/calibration_results.yml
+/calibration_results.yaml
