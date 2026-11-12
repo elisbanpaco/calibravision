@@ -54,7 +54,7 @@ void Camera::run()
     captureRequested = false;
     calibrationRequested = false;
     try {
-        board.points();
+        const PatternDetector detector(board);
         message("Abriendo cámara…");
         cv::VideoCapture capture(device);
         if (!capture.isOpened())
@@ -80,27 +80,21 @@ void Camera::run()
             if (frame.size() != imageSize)
                 throw std::runtime_error("La resolución cambió. Inicia una nueva sesión para recalibrar.");
             cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-            std::vector<cv::Point2f> corners;
-            const bool found = cv::findChessboardCorners(gray, {board.columns, board.rows}, corners,
-                cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_NORMALIZE_IMAGE | cv::CALIB_CB_FAST_CHECK);
-            if (found)
-                cv::cornerSubPix(gray, corners, {11,11}, {-1,-1},
-                    {cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 30, 0.1});
+            const auto view = detector.detect(gray);
+            const bool found = view.usable();
             if (captureRequested.exchange(false) && !pending.valid()) {
                 bool duplicate = false;
                 if (found) {
-                    // shortcut: solo filtra desplazamiento de esquinas, evaluar cobertura para uso metrológico.
-                    for (const auto& view : views)
-                        if (cv::norm(view, corners, cv::NORM_L2) / std::sqrt(corners.size()) <
-                            0.015 * std::hypot(frame.cols, frame.rows))
+                    for (const auto& previous : views)
+                        if (similarView(view, previous, frame.size()))
                             duplicate = true;
                 }
                 if (!found)
-                    message("No se capturó: el tablero debe verse completo y enfocado.");
+                    message("No se capturó: muestra el patrón enfocado; ChArUco requiere al menos 6 esquinas no colineales.");
                 else if (duplicate)
                     message("Vista muy similar. Mueve o inclina el tablero antes de capturar.");
                 else {
-                    views.push_back(corners);
+                    views.push_back(view);
                     pose = false;
                     std::lock_guard<std::mutex> lock(mutex);
                     state.samples = static_cast<int>(views.size());
@@ -122,8 +116,13 @@ void Camera::run()
             double distance = 0;
             if (found) {
                 if (pose && calibration.valid())
-                    drawPose(frame, board, calibration, corners, distance);
-                cv::drawChessboardCorners(frame, {board.columns, board.rows}, corners, true);
+                    drawPose(frame, board, calibration, view, distance);
+            }
+            if (!view.image.empty()) {
+                if (board.pattern == Pattern::Charuco)
+                    cv::aruco::drawDetectedCornersCharuco(frame, view.image, cv::noArray(), {0,200,0});
+                else
+                    cv::drawChessboardCorners(frame, {board.columns, board.rows}, view.image, found);
             }
             ++frames;
             const double elapsed = std::chrono::duration<double>(Clock::now() - lastRate).count();
@@ -138,6 +137,7 @@ void Camera::run()
             ++state.sequence;
             state.connected = true;
             state.pattern = found;
+            state.detectedPoints = static_cast<int>(view.image.size());
             state.distanceMm = distance;
         }
         message("Cámara detenida. Las capturas se conservan en esta sesión.");

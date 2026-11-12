@@ -3,6 +3,8 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
+#include <QImage>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFile>
@@ -27,6 +29,8 @@
 #include <algorithm>
 #include <stdexcept>
 
+constexpr const char* patternImages[] = {"chessboard.png", "asymmetric_circles.png", "charuco.png"};
+
 class Window : public QMainWindow {
 public:
     Window();
@@ -39,6 +43,8 @@ private:
     void refresh();
     void save();
     void load();
+    void updatePattern(bool defaults);
+    Board selectedBoard() const;
     bool discardSession();
     std::unique_ptr<Camera> camera;
     std::uint64_t sequence = 0;
@@ -46,6 +52,10 @@ private:
     std::uint64_t savedRevision = 0;
     QSpinBox *device = new QSpinBox, *columns = new QSpinBox, *rows = new QSpinBox;
     QDoubleSpinBox* square = new QDoubleSpinBox;
+    QDoubleSpinBox* marker = new QDoubleSpinBox;
+    QComboBox* patternChoice = new QComboBox;
+    QLabel *columnLabel = new QLabel, *rowLabel = new QLabel, *sizeLabel = new QLabel,
+           *markerLabel = new QLabel("&Lado del marcador"), *boardHint = new QLabel;
     QGroupBox* settings = new QGroupBox("1. Configura el tablero");
     QGroupBox* output = new QGroupBox("3. Revisa el resultado");
     QLabel* configuration = new QLabel;
@@ -69,7 +79,7 @@ private:
 Window::Window()
 {
     setWindowTitle("Camera Lab · Calibración y realidad aumentada");
-    resize(1180, 780);
+    resize(1180, 840);
     setMinimumSize(900, 650);
     auto* root = new QWidget;
     auto* layout = new QVBoxLayout(root);
@@ -100,6 +110,9 @@ Window::Window()
     controls->setContentsMargins(0,0,0,0);
     controls->setSpacing(14);
     auto* form = new QFormLayout(settings);
+    patternChoice->addItems({"Ajedrez", "Círculos asimétricos", "ChArUco"});
+    patternChoice->setObjectName("patternChoice");
+    form->addRow("&Patrón", patternChoice);
     device->setRange(0,99);
     device->setToolTip("Índice de cámara de OpenCV. La cámara principal suele ser 0.");
     columns->setRange(3,30);
@@ -110,11 +123,19 @@ Window::Window()
     square->setDecimals(2);
     square->setValue(24.5);
     square->setSuffix(" mm");
+    marker->setRange(0.1,999);
+    marker->setDecimals(2);
+    marker->setValue(15);
+    marker->setSuffix(" mm");
     form->addRow("&Cámara", device);
-    form->addRow("&Columnas interiores", columns);
-    form->addRow("&Filas interiores", rows);
-    form->addRow("&Lado del cuadrado", square);
-    auto* boardHint = new QLabel("Cuenta las esquinas interiores, no los cuadrados. Mide el lado real del cuadrado.");
+    columnLabel->setBuddy(columns);
+    rowLabel->setBuddy(rows);
+    sizeLabel->setBuddy(square);
+    markerLabel->setBuddy(marker);
+    form->addRow(columnLabel, columns);
+    form->addRow(rowLabel, rows);
+    form->addRow(sizeLabel, square);
+    form->addRow(markerLabel, marker);
     boardHint->setWordWrap(true);
     form->addRow(boardHint);
     controls->addWidget(settings);
@@ -184,9 +205,16 @@ Window::Window()
             camera->requestInterruption();
             stopping = true;
         } else {
-            if (!camera)
-                camera = std::make_unique<Camera>(device->value(),
-                    Board{columns->value(),rows->value(),static_cast<float>(square->value())});
+            if (!camera) {
+                try {
+                    const auto board = selectedBoard();
+                    board.points();
+                    camera = std::make_unique<Camera>(device->value(), board);
+                } catch (const std::exception& error) {
+                    QMessageBox::warning(this, "Revisa el patrón", QString::fromUtf8(error.what()));
+                    return;
+                }
+            }
             stopping = false;
             camera->start();
         }
@@ -198,7 +226,7 @@ Window::Window()
         sequence = 0;
         unsaved = false;
         savedRevision = 0;
-        video->setFrame({});
+        updatePattern(false);
         refresh();
     });
     connect(capture, &QPushButton::clicked, this, [this] { camera->captureView(); });
@@ -209,10 +237,53 @@ Window::Window()
     });
     connect(saveButton, &QPushButton::clicked, this, [this] { save(); });
     connect(loadButton, &QPushButton::clicked, this, [this] { load(); });
+    connect(patternChoice, &QComboBox::currentIndexChanged, this, [this] { updatePattern(true); });
     auto* timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, [this] { refresh(); });
     timer->start(16);
+    updatePattern(true);
     refresh();
+}
+
+Board Window::selectedBoard() const
+{
+    return {columns->value(), rows->value(), static_cast<float>(square->value()),
+            static_cast<Pattern>(patternChoice->currentIndex()), static_cast<float>(marker->value())};
+}
+
+void Window::updatePattern(bool defaults)
+{
+    const auto type = static_cast<Pattern>(patternChoice->currentIndex());
+    const bool charuco = type == Pattern::Charuco;
+    const bool circles = type == Pattern::AsymmetricCircles;
+    if (defaults) {
+        columns->setValue(charuco ? 5 : circles ? 4 : 9);
+        rows->setValue(charuco ? 7 : circles ? 11 : 6);
+        square->setValue(charuco ? 30 : circles ? 20 : 24.5);
+        marker->setValue(15);
+    }
+    columnLabel->setText(charuco ? "&Columnas de cuadrados" : circles ? "&Columnas de centros" : "&Columnas interiores");
+    rowLabel->setText(charuco ? "&Filas de cuadrados" : circles ? "&Filas de centros" : "&Filas interiores");
+    sizeLabel->setText(circles ? "&Paso base" : "&Lado del cuadrado");
+    marker->setVisible(charuco);
+    markerLabel->setVisible(charuco);
+    boardHint->setText(charuco ?
+        "Cuenta cuadrados. Diccionario fijo: DICT_5X5_100, IDs desde 0. Se requieren 6 esquinas no colineales; puede verse parcialmente." : circles ?
+        "Referencia girada: 4 × 11 centros. Paso base = mitad de la separación entre centros de una misma fila del modelo. Mide el impreso." :
+        "Cuenta las esquinas interiores, no los cuadrados. Mide el lado real del cuadrado.");
+    const QImage image = QImage(QString(":/patterns/%1").arg(patternImages[patternChoice->currentIndex()]))
+        .convertToFormat(QImage::Format_RGB888);
+    if (image.isNull()) {
+        video->setFrame({});
+        message->setText("No se pudo cargar la referencia del patrón.");
+        return;
+    }
+    cv::Mat rgb(image.height(), image.width(), CV_8UC3,
+                const_cast<uchar*>(image.constBits()), image.bytesPerLine());
+    cv::Mat bgr;
+    cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+    video->setFrame(bgr);
+    video->setAccessibleName("Referencia del patrón " + patternChoice->currentText() + " y vídeo de la cámara");
 }
 
 void Window::refresh()
@@ -228,9 +299,10 @@ void Window::refresh()
     unsaved = calibrated && state.calibrationRevision != savedRevision;
     settings->setVisible(!camera);
     configuration->setVisible(camera != nullptr);
-    configuration->setText(QString("Cámara %1 · Tablero %2 × %3 · %4 mm\nPara cambiar: detén la cámara y elige Nueva sesión.")
-        .arg(device->value()).arg(columns->value()).arg(rows->value())
-        .arg(camera ? camera->board.squareMm : square->value(),0,'f',2));
+    configuration->setText(QString("Cámara %1 · %2\n%3 × %4 · %5 mm%6\nPara cambiar: detén la cámara y elige Nueva sesión.")
+        .arg(device->value()).arg(patternChoice->currentText()).arg(columns->value()).arg(rows->value())
+        .arg(camera ? camera->board.squareMm : square->value(),0,'f',2)
+        .arg(patternChoice->currentIndex() == 2 ? QString(" · marcador %1 mm").arg(marker->value(),0,'f',2) : ""));
     output->setVisible(camera != nullptr);
     reset->setEnabled(camera && !running);
     loadButton->setEnabled(!running);
@@ -248,10 +320,11 @@ void Window::refresh()
     ar->setText(!ar->isChecked() ? "Realidad aumentada: desactivada" :
                 live ? "Realidad aumentada: activada" : "Realidad aumentada: en pausa");
     connection->setText(live ? "Cámara conectada" : running ? "Cámara en transición…" : "Cámara detenida");
-    pattern->setText(live && state.pattern ? "Tablero detectado" : "Tablero sin detectar");
+    pattern->setText(live && state.pattern ? QString("Patrón detectado · %1 puntos").arg(state.detectedPoints) :
+        live && state.detectedPoints > 0 ? "Puntos insuficientes o colineales" : "Patrón sin detectar");
     samples->setText(QString("%1 vistas capturadas · mínimo %2").arg(state.samples).arg(minimumViews));
     progress->setValue(std::min(state.samples, minimumViews));
-    metrics->setText(state.frame.empty() ? "Sin vídeo" :
+    metrics->setText(state.frame.empty() ? "Referencia: " + patternChoice->currentText() + " · Inicia la cámara para detectar el patrón" :
         QString("%1 × %2 px · %3 FPS de procesamiento%4")
             .arg(state.frame.cols).arg(state.frame.rows).arg(state.fps,0,'f',1)
             .arg(live ? "" : " · Última imagen; vídeo detenido"));
@@ -332,13 +405,18 @@ void Window::load()
         auto replacement = std::make_unique<Camera>(device->value(), loaded.board, loaded.calibration);
         if (!discardSession()) return;
         camera = std::move(replacement);
+        {
+            const QSignalBlocker blocker(patternChoice);
+            patternChoice->setCurrentIndex(static_cast<int>(loaded.board.pattern));
+        }
         columns->setValue(loaded.board.columns);
         rows->setValue(loaded.board.rows);
         square->setValue(loaded.board.squareMm);
+        marker->setValue(loaded.board.markerMm);
         sequence = 0;
         stopping = false;
         savedRevision = camera->snapshot().calibrationRevision;
-        video->setFrame({});
+        updatePattern(false);
         {
             const QSignalBlocker blocker(ar);
             ar->setChecked(false);
@@ -376,14 +454,17 @@ int main(int argc, char* argv[])
         "QPushButton#ar:checked:hover {background: #10458e;}"
         "QPushButton#ar:checked:disabled {background: #e9eef5; color: #64748b; border-color: #94a3b8;}"
         "QPushButton:disabled, QPushButton#primary:disabled {background: #e9eef5; color: #64748b; border-color: #cbd5e1;}"
-        "QPushButton:focus, QSpinBox:focus, QDoubleSpinBox:focus {border: 2px solid #1559b7;}"
+        "QPushButton:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {border: 2px solid #1559b7;}"
         "QSpinBox, QDoubleSpinBox {min-height: 30px; background: white; border: 1px solid #94a3b8; border-radius: 4px;}"
+        "QComboBox {min-height: 34px; background: white; border: 1px solid #94a3b8; border-radius: 4px;}"
         "QLabel#message {background: #e5edf7; border-radius: 6px; padding: 10px 14px;}"
         "QProgressBar {border: 0; background: #e2e8f0; border-radius: 3px; max-height: 6px;}"
         "QProgressBar::chunk {background: #1559b7; border-radius: 3px;}");
     Window window;
     window.show();
     if (app.arguments().contains("--smoke-test")) {
+        for (const char* name : patternImages)
+            if (QImage(QString(":/patterns/%1").arg(name)).isNull()) return 1;
         cv::Mat image(480,640,CV_8UC3,cv::Scalar(30,20,10));
         cv::rectangle(image, {0,0,320,240}, {0,0,255}, cv::FILLED);
         cv::rectangle(image, {320,240,320,240}, {0,255,0}, cv::FILLED);

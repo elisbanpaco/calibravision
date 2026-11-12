@@ -15,6 +15,7 @@ struct CameraState {
     int samples = 0;
     bool connected = false;
     bool pattern = false;
+    int detectedPoints = 0;
     bool calibrating = false;
     double fps = 0;
     double distanceMm = 0;
@@ -38,7 +39,7 @@ private:
     const int device;
     mutable std::mutex mutex;
     CameraState state;
-    std::vector<std::vector<cv::Point2f>> views;
+    std::vector<View> views;
     cv::Size imageSize;
     std::atomic_bool captureRequested{false}, calibrationRequested{false}, pose{false};
 };
