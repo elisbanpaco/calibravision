@@ -8,7 +8,7 @@ Permite pasar de las capturas de un patrón físico a una calibración guardada,
 
 - Selector de ajedrez, círculos asimétricos y ChArUco con imagen de referencia y parámetros específicos.
 - Captura de vistas, rechazo de vistas similares y calibración con error de reproyección RMS.
-- Estimación de pose, volumen 3D y distancia al origen del patrón en milímetros.
+- Estimación de pose y seis figuras: prisma, pirámide, cilindro, esfera, cono y toroide. Distancia al origen del patrón en milímetros y ejes X, Y y Z opcionales.
 - Guardado y carga de calibraciones YAML con validación de parámetros y resolución.
 - Captura y detección fuera del hilo de interfaz; calibración en una tarea independiente y vídeo mediante una textura OpenGL.
 
@@ -19,7 +19,7 @@ Permite pasar de las capturas de un patrón físico a una calibración guardada,
 | <img src="app/imgs/chessboard.png" alt="Tablero de ajedrez con nueve por seis esquinas interiores" width="220"> | <img src="app/imgs/asymmetric_circles.png" alt="Rejilla de círculos con filas alternadas" width="220"> | <img src="app/imgs/charuco.png" alt="Tablero ChArUco que combina cuadrados y marcadores ArUco" width="150"> |
 | Referencia de 9 × 6 esquinas interiores. | Referencia de 4 × 11 centros. | Referencia de 5 × 7 cuadrados y 24 esquinas interiores. |
 
-Los patrones permiten localizar el tablero; el volumen y los ejes son la visualización de realidad aumentada. ChArUco admite vistas parciales con al menos seis esquinas no colineales. El diccionario utilizado es `DICT_5X5_100`.
+Los patrones permiten localizar el tablero; las figuras y los ejes son la visualización de realidad aumentada. Puedes cambiar de figura durante el vídeo usando la misma calibración. ChArUco admite vistas parciales con al menos seis esquinas no colineales. El diccionario utilizado es `DICT_5X5_100`.
 
 Consulta las medidas, fuentes y licencia de las imágenes en [app/imgs/README.md](app/imgs/README.md).
 
@@ -56,7 +56,7 @@ En otros entornos, instala las bibliotecas de desarrollo respetando las versione
 1. Elige el patrón y configura sus dimensiones y medidas reales. La imagen del visor sirve como referencia antes de iniciar la cámara.
 2. Inicia la cámara y captura al menos ocho vistas desde distintas posiciones, distancias e inclinaciones. Mantén fijo el enfoque y el zoom.
 3. Calibra y revisa el RMS. Un error menor es preferible, pero no garantiza por sí solo una calibración precisa.
-4. Activa la realidad aumentada para ver el volumen, los ejes y la distancia al origen del patrón.
+4. Selecciona una figura y activa la realidad aumentada. Puedes alternar las seis figuras y mostrar u ocultar los ejes sin recalibrar.
 5. Guarda el YAML para reutilizarlo mediante **Cargar calibración…** con la misma cámara, resolución y enfoque/zoom.
 
 | Atajo | Acción |

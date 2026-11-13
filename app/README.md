@@ -41,7 +41,7 @@ ctest --test-dir app/build --output-on-failure
 1. Elige el patrón y configura sus medidas físicas según la tabla siguiente. Los valores iniciales de ajedrez son los del programa original: cámara 0, tablero 9 × 6 y 24.5 mm. Comprueba las medidas del impreso antes de capturar.
 2. Inicia la cámara. Con el patrón enfocado, pulsa **Capturar vista** o **Espacio**. Ajedrez y círculos deben verse completos; ChArUco permite vistas parciales con al menos seis esquinas no colineales. Cambia la inclinación, distancia y posición entre capturas. Mantén fijo el enfoque/zoom del objetivo.
 3. Con al menos ocho vistas distintas, pulsa **Calibrar cámara** o **Ctrl+Enter**. Ocho es un mínimo de la aplicación, no una garantía de precisión; usa más vistas bien distribuidas.
-4. Revisa el RMS en píxeles. Activa la realidad aumentada para ver el volumen, los ejes y la distancia desde la cámara al origen del tablero, en mm. El botón muestra **activada** en azul, **desactivada** o **en pausa** al detener el vídeo. El dibujo aparece cuando se detecta el tablero.
+4. Revisa el RMS en píxeles. En **Figura**, elige **Prisma rectangular**, **Pirámide**, **Cilindro**, **Esfera**, **Cono** o **Toroide** y activa la realidad aumentada. **Mostrar ejes: sí/no** controla los ejes X, Y y Z de forma independiente de la figura. Puedes cambiar ambos controles durante el vídeo sin recalibrar. El botón de realidad aumentada muestra **activada** en azul, **desactivada** o **en pausa** al detener el vídeo. El dibujo aparece cuando se detecta el patrón; la distancia al origen se expresa en mm.
 5. Guarda con **Guardar calibración** o **Ctrl+S**. El YAML conserva `cameraMatrix`, `distCoeffs` y `RMS`, y agrega resolución, dimensiones del tablero, tamaño físico, número de vistas e índice de cámara. El archivo se escribe de forma atómica.
 
 | Patrón | Dimensiones de referencia | Medidas en milímetros |
@@ -50,7 +50,9 @@ ctest --test-dir app/build --output-on-failure
 | Círculos asimétricos | 4 × 11 centros; la imagen aparece girada | Paso base `s`: centros `(2·columna + fila % 2)·s, fila·s`. La separación en una misma fila del modelo es `2s`. El valor inicial de 20 mm debe verificarse en el impreso. |
 | ChArUco | 5 × 7 cuadrados, 24 esquinas interiores | Cuadrados de 30 mm y marcadores de 15 mm en la referencia. Diccionario fijo `DICT_5X5_100`, IDs consecutivos desde 0; patrón moderno de OpenCV. |
 
-El cubo y los ejes se dibujan con cualquiera de los tres patrones. En ajedrez y círculos, el origen está en el primer punto del modelo; en ChArUco, en la esquina exterior definida por OpenCV. El mínimo de seis puntos para ChArUco es una regla de esta aplicación para evitar vistas insuficientes o colineales.
+Las seis figuras se dibujan como contornos sobre cualquiera de los tres patrones. Prisma, pirámide, cilindro y cono tienen una altura de tres veces el lado del cuadrado o el paso base. El prisma y la pirámide usan la extensión del tablero como base; las figuras circulares se centran en ella. El diámetro de la esfera queda limitado por esa altura y por el lado menor del tablero. El toroide tiene forma de anillo, con radio del tubo igual a un tercio de su radio exterior. En ajedrez y círculos, el origen está en el primer punto del modelo; en ChArUco, en la esquina exterior definida por OpenCV. El mínimo de seis puntos para ChArUco es una regla de esta aplicación para evitar vistas insuficientes o colineales.
+
+La figura y la visibilidad de los ejes son opciones de visualización: no cambian las capturas ni el resultado de calibración y no se guardan en el YAML. Se conservan al detener el vídeo, cargar otra calibración o iniciar una nueva sesión mientras la aplicación permanece abierta.
 
 ### Reutilizar una calibración
 
@@ -80,7 +82,7 @@ Al iniciar, el formulario de configuración se sustituye por un resumen para dej
 
 ## Verificación
 
-CTest detecta los tres patrones sobre las imágenes oficiales, comprueba ChArUco parcialmente oculto y recupera una cámara conocida desde vistas sintéticas completas/parciales. También comprueba validación, error de reproyección, guardado/carga compatible con archivos anteriores, restauración de sesión, pose y escala en milímetros. No sustituye la validación con cámara y tablero reales.
+CTest detecta los tres patrones sobre las imágenes oficiales, comprueba ChArUco parcialmente oculto y recupera una cámara conocida desde vistas sintéticas completas/parciales. También comprueba las seis figuras con y sin ejes, que cambiar de figura conserve la calibración y la distancia, validación, error de reproyección, guardado/carga compatible con archivos anteriores, restauración de sesión, pose y escala en milímetros. No sustituye la validación con cámara y tablero reales.
 
 Prueba gráfica sin abrir la cámara:
 

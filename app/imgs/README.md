@@ -1,7 +1,7 @@
 # Patrones de referencia
 
 Imágenes incluidas en el selector de patrones y en el ejecutable. La aplicación detecta los tres patrones.
-El cubo y los ejes son la visualización de realidad aumentada; estos patrones permiten estimar su posición.
+Las figuras y los ejes son la visualización de realidad aumentada; estos patrones permiten estimar su posición.
 
 | Archivo | Patrón | Configuración del detector |
 | --- | --- | --- |
