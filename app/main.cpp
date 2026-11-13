@@ -54,6 +54,8 @@ private:
     QDoubleSpinBox* square = new QDoubleSpinBox;
     QDoubleSpinBox* marker = new QDoubleSpinBox;
     QComboBox* patternChoice = new QComboBox;
+    QComboBox* figureChoice = new QComboBox;
+    QPushButton* axes = new QPushButton("Mostrar ejes: sí");
     QLabel *columnLabel = new QLabel, *rowLabel = new QLabel, *sizeLabel = new QLabel,
            *markerLabel = new QLabel("&Lado del marcador"), *boardHint = new QLabel;
     QGroupBox* settings = new QGroupBox("1. Configura el tablero");
@@ -175,9 +177,20 @@ Window::Window()
     auto* rmsHint = new QLabel("El RMS expresa el error de reproyección en píxeles. Un valor menor es mejor; no garantiza por sí solo una calibración precisa.");
     rmsHint->setWordWrap(true);
     outputLayout->addWidget(rmsHint);
+    figureChoice->addItems({"Prisma rectangular", "Pirámide", "Cilindro", "Esfera", "Cono", "Toroide"});
+    figureChoice->setObjectName("figureChoice");
+    figureChoice->setToolTip("Cambia la figura durante el vídeo sin recalibrar la cámara.");
+    auto* figureForm = new QFormLayout;
+    figureForm->addRow("&Figura", figureChoice);
+    outputLayout->addLayout(figureForm);
+    axes->setObjectName("axes");
+    axes->setCheckable(true);
+    axes->setChecked(true);
+    axes->setToolTip("Muestra los ejes X, Y y Z junto a la figura cuando la realidad aumentada está activada.");
+    outputLayout->addWidget(axes);
     ar->setCheckable(true);
     ar->setObjectName("ar");
-    ar->setToolTip("Activa o desactiva el volumen y los ejes sobre el tablero detectado.");
+    ar->setToolTip("Activa o desactiva la figura elegida y los ejes opcionales sobre el patrón detectado.");
     outputLayout->addWidget(ar);
     saveButton->setShortcut(QKeySequence::Save);
     outputLayout->addWidget(saveButton);
@@ -215,6 +228,8 @@ Window::Window()
                     return;
                 }
             }
+            camera->setFigure(static_cast<Figure>(figureChoice->currentIndex()));
+            camera->setAxes(axes->isChecked());
             stopping = false;
             camera->start();
         }
@@ -234,6 +249,13 @@ Window::Window()
     connect(ar, &QPushButton::toggled, this, [this](bool enabled) {
         if (camera) camera->setPose(enabled);
         refresh();
+    });
+    connect(figureChoice, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (camera) camera->setFigure(static_cast<Figure>(index));
+    });
+    connect(axes, &QPushButton::toggled, this, [this](bool enabled) {
+        if (camera) camera->setAxes(enabled);
+        axes->setText(enabled ? "Mostrar ejes: sí" : "Mostrar ejes: no");
     });
     connect(saveButton, &QPushButton::clicked, this, [this] { save(); });
     connect(loadButton, &QPushButton::clicked, this, [this] { load(); });
@@ -312,6 +334,8 @@ void Window::refresh()
     calibrateButton->setEnabled(live && state.samples >= minimumViews && !state.calibrating);
     calibrateButton->setText(state.calibrating ? "Calibrando…" : "Calibrar cámara");
     saveButton->setEnabled(calibrated);
+    figureChoice->setEnabled(calibrated);
+    axes->setEnabled(calibrated);
     ar->setEnabled(live && calibrated);
     if (!calibrated) {
         const QSignalBlocker blocker(ar);
@@ -405,6 +429,8 @@ void Window::load()
         auto replacement = std::make_unique<Camera>(device->value(), loaded.board, loaded.calibration);
         if (!discardSession()) return;
         camera = std::move(replacement);
+        camera->setFigure(static_cast<Figure>(figureChoice->currentIndex()));
+        camera->setAxes(axes->isChecked());
         {
             const QSignalBlocker blocker(patternChoice);
             patternChoice->setCurrentIndex(static_cast<int>(loaded.board.pattern));
@@ -450,9 +476,9 @@ int main(int argc, char* argv[])
         "QPushButton:pressed {background: #cbdcf2;}"
         "QPushButton#primary {background: #1559b7; color: white; border-color: #1559b7;}"
         "QPushButton#primary:hover {background: #10458e;}"
-        "QPushButton#ar:checked {background: #1559b7; color: white; border: 2px solid #10458e;}"
-        "QPushButton#ar:checked:hover {background: #10458e;}"
-        "QPushButton#ar:checked:disabled {background: #e9eef5; color: #64748b; border-color: #94a3b8;}"
+        "QPushButton#ar:checked, QPushButton#axes:checked {background: #1559b7; color: white; border: 2px solid #10458e;}"
+        "QPushButton#ar:checked:hover, QPushButton#axes:checked:hover {background: #10458e;}"
+        "QPushButton#ar:checked:disabled, QPushButton#axes:checked:disabled {background: #e9eef5; color: #64748b; border-color: #94a3b8;}"
         "QPushButton:disabled, QPushButton#primary:disabled {background: #e9eef5; color: #64748b; border-color: #cbd5e1;}"
         "QPushButton:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {border: 2px solid #1559b7;}"
         "QSpinBox, QDoubleSpinBox {min-height: 30px; background: white; border: 1px solid #94a3b8; border-radius: 4px;}"

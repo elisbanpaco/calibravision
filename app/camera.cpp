@@ -116,7 +116,7 @@ void Camera::run()
             double distance = 0;
             if (found) {
                 if (pose && calibration.valid())
-                    drawPose(frame, board, calibration, view, distance);
+                    drawPose(frame, board, calibration, view, distance, figure.load(), axes.load());
             }
             if (!view.image.empty()) {
                 if (board.pattern == Pattern::Charuco)

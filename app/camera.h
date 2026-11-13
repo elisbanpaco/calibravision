@@ -30,6 +30,8 @@ public:
     void captureView() { captureRequested = true; }
     void calibrateViews() { calibrationRequested = true; }
     void setPose(bool enabled) { pose = enabled; }
+    void setFigure(Figure selected) { figure = selected; }
+    void setAxes(bool enabled) { axes = enabled; }
     const Board board;
 
 protected:
@@ -42,4 +44,6 @@ private:
     std::vector<View> views;
     cv::Size imageSize;
     std::atomic_bool captureRequested{false}, calibrationRequested{false}, pose{false};
+    std::atomic<Figure> figure{Figure::Prism};
+    std::atomic_bool axes{true};
 };
