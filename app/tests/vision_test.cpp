@@ -160,6 +160,28 @@ int main()
             check(drawPose(overlay,pattern,calibrated,synthetic[0],distance), "No se recuperó la pose del patrón.");
             check(std::abs(distance-cv::norm(cv::Vec3d(-100,-70,570))) < 0.1,
                   "El patrón alteró la escala física.");
+            const auto originalCalibration = writeCalibration(calibrated,pattern,0);
+            std::vector<cv::Mat> figures;
+            for (Figure figure : {Figure::Prism,Figure::Pyramid,Figure::Cylinder,
+                                  Figure::Sphere,Figure::Cone,Figure::Torus}) {
+                cv::Mat withoutAxes = cv::Mat::zeros(480,640,CV_8UC3);
+                check(drawPose(withoutAxes,pattern,calibrated,synthetic[0],distance,figure,false),
+                      "No se dibujó una figura con la calibración existente.");
+                check(cv::countNonZero(withoutAxes.reshape(1)) > 0,
+                      "La figura no dejó píxeles visibles.");
+                for (const auto& previous : figures)
+                    check(cv::norm(previous,withoutAxes,cv::NORM_L1) > 0,
+                          "Dos figuras diferentes producen la misma imagen.");
+                cv::Mat withAxes = cv::Mat::zeros(480,640,CV_8UC3);
+                check(drawPose(withAxes,pattern,calibrated,synthetic[0],distance,figure,true) &&
+                      cv::norm(withAxes,withoutAxes,cv::NORM_L1) > 0,
+                      "El control de ejes no cambia el dibujo.");
+                check(std::abs(distance-cv::norm(cv::Vec3d(-100,-70,570))) < 0.1,
+                      "Cambiar de figura alteró la distancia estimada.");
+                figures.push_back(withoutAxes);
+            }
+            check(writeCalibration(calibrated,pattern,0) == originalCalibration,
+                  "Cambiar de figura modificó la calibración.");
             const auto saved = readCalibration(writeCalibration(calibrated,pattern,0));
             check(saved.board.pattern == pattern.pattern && saved.board.points() == points,
                   "Se perdió el patrón al guardar/cargar.");
@@ -175,7 +197,7 @@ int main()
         rejects([] { Board{5,7,30,Pattern::Charuco,30}.points(); });
         rejects([] { Board{30,30,30,Pattern::Charuco,15}.points(); });
         rejects([] { Board{9,6,24.5f,static_cast<Pattern>(99)}.points(); });
-        std::cout << "OK: tres detectores, ocultación ChArUco, calibración, pose, escala y YAML compatible.\n";
+        std::cout << "OK: tres patrones, seis figuras, ejes opcionales, calibración, pose, escala y YAML compatible.\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

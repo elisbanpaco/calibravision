@@ -7,6 +7,7 @@
 #include <string>
 
 enum class Pattern { Chessboard, AsymmetricCircles, Charuco };
+enum class Figure { Prism, Pyramid, Cylinder, Sphere, Cone, Torus };
 
 struct Board {
     int columns = 9;
@@ -58,4 +59,4 @@ constexpr int minimumViews = 8;
 Calibration calibrate(const Board& board, cv::Size size,
                       const std::vector<View>& views);
 bool drawPose(cv::Mat& frame, const Board& board, const Calibration& calibration,
-              const View& view, double& distanceMm);
+              const View& view, double& distanceMm, Figure figure = Figure::Prism, bool axes = true);

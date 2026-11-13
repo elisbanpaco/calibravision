@@ -5,6 +5,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
+#include <utility>
 
 const char* Board::key() const
 {
@@ -235,7 +236,7 @@ Calibration calibrate(const Board& board, cv::Size size,
 }
 
 bool drawPose(cv::Mat& frame, const Board& board, const Calibration& calibration,
-              const View& view, double& distanceMm)
+              const View& view, double& distanceMm, Figure figure, bool axes)
 {
     if (!calibration.valid() || frame.size() != calibration.imageSize ||
         !view.usable())
@@ -250,23 +251,80 @@ bool drawPose(cv::Mat& frame, const Board& board, const Calibration& calibration
     for (const auto& point : points) { x = std::max(x, point.x); y = std::max(y, point.y); }
     if (board.pattern == Pattern::Charuco) { x += board.squareMm; y += board.squareMm; }
     const float z = -3 * board.squareMm;
-    const std::vector<cv::Point3f> cube = {
-        {0,0,0}, {x,0,0}, {x,y,0}, {0,y,0},
-        {0,0,z}, {x,0,z}, {x,y,z}, {0,y,z}};
+    std::vector<cv::Point3f> vertices;
+    std::vector<std::pair<int,int>> edges;
+    switch (figure) {
+    case Figure::Prism:
+        vertices = {{0,0,0},{x,0,0},{x,y,0},{0,y,0},
+                    {0,0,z},{x,0,z},{x,y,z},{0,y,z}};
+        for (int i = 0; i < 4; ++i) {
+            edges.emplace_back(i,(i+1)%4);
+            edges.emplace_back(i+4,(i+1)%4+4);
+            edges.emplace_back(i,i+4);
+        }
+        break;
+    case Figure::Pyramid:
+        vertices = {{0,0,0},{x,0,0},{x,y,0},{0,y,0},{x/2,y/2,z}};
+        for (int i = 0; i < 4; ++i) {
+            edges.emplace_back(i,(i+1)%4);
+            edges.emplace_back(i,4);
+        }
+        break;
+    case Figure::Cylinder:
+    case Figure::Cone: {
+        constexpr int segments = 48;
+        const bool cone = figure == Figure::Cone;
+        const float radius = std::min(x,y)/2;
+        for (int ring = 0; ring < (cone ? 1 : 2); ++ring)
+            for (int i = 0; i < segments; ++i) {
+                const double angle = 2*CV_PI*i/segments;
+                vertices.emplace_back(x/2+radius*std::cos(angle), y/2+radius*std::sin(angle), ring*z);
+            }
+        if (cone) vertices.emplace_back(x/2,y/2,z);
+        for (int i = 0; i < segments; ++i) {
+            edges.emplace_back(i,(i+1)%segments);
+            if (!cone) edges.emplace_back(i+segments,(i+1)%segments+segments);
+            if (i%(segments/4) == 0) edges.emplace_back(i,cone ? segments : i+segments);
+        }
+        break;
+    }
+    case Figure::Sphere:
+    case Figure::Torus: {
+        constexpr int segments = 48, bands = 12;
+        const bool sphere = figure == Figure::Sphere;
+        const int rings = sphere ? bands+1 : bands;
+        const float radius = sphere ? std::min(-z/2,std::min(x,y)/2) : std::min(x,y)/2;
+        for (int j = 0; j < rings; ++j) {
+            const double latitude = (sphere ? CV_PI : 2*CV_PI)*j/bands;
+            const double ringRadius = sphere ? radius*std::sin(latitude) : radius*(2+std::cos(latitude))/3;
+            const double height = sphere ? -radius+radius*std::cos(latitude) : radius*(-1+std::sin(latitude))/3;
+            for (int i = 0; i < segments; ++i) {
+                const double longitude = 2*CV_PI*i/segments;
+                vertices.emplace_back(x/2+ringRadius*std::cos(longitude),
+                                      y/2+ringRadius*std::sin(longitude), height);
+                if (j%2 == 0 && (!sphere || (j > 0 && j < bands)))
+                    edges.emplace_back(j*segments+i,j*segments+(i+1)%segments);
+                if (i%(segments/8) == 0 && (!sphere || j < bands))
+                    edges.emplace_back(j*segments+i,((j+1)%rings)*segments+i);
+            }
+        }
+        break;
+    }
+    default:
+        return false;
+    }
     std::vector<cv::Point2f> projected;
-    cv::projectPoints(cube, rotation, translation, calibration.cameraMatrix,
+    cv::projectPoints(vertices, rotation, translation, calibration.cameraMatrix,
                       calibration.distCoeffs, projected);
     for (const auto& point : projected)
         if (!std::isfinite(point.x) || !std::isfinite(point.y) ||
             std::abs(point.x) > 1e6 || std::abs(point.y) > 1e6)
             return false;
-    for (int i = 0; i < 4; ++i) {
-        cv::line(frame, projected[i], projected[(i+1)%4], {0,200,255}, 2, cv::LINE_AA);
-        cv::line(frame, projected[i+4], projected[(i+1)%4+4], {0,200,255}, 2, cv::LINE_AA);
-        cv::line(frame, projected[i], projected[i+4], {0,200,255}, 2, cv::LINE_AA);
-    }
-    cv::drawFrameAxes(frame, calibration.cameraMatrix, calibration.distCoeffs,
-                      rotation, translation, 3 * board.squareMm, 2);
+    for (const auto& edge : edges)
+        cv::line(frame, projected[edge.first], projected[edge.second], {0,200,255}, 2, cv::LINE_AA);
+    if (axes)
+        cv::drawFrameAxes(frame, calibration.cameraMatrix, calibration.distCoeffs,
+                          rotation, translation, 3 * board.squareMm, 2);
     distanceMm = cv::norm(translation);
     return true;
 }
